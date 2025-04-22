@@ -22,7 +22,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 8.0.x
           
       - name: Restore dependencies
         run: dotnet restore
@@ -42,7 +42,7 @@ jobs:
       - name: Create plugin package
         run: |
           mkdir -p dist
-          cd Jellyfin.Plugin.StaticAssets/bin/Release/net6.0
+          cd Jellyfin.Plugin.StaticAssets/bin/Release/net8.0
           zip -r ../../../../dist/jellyfin-plugin-staticassets_${{ steps.get_version.outputs.VERSION }}.zip .
         
       - name: Create Release
