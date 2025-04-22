@@ -1,0 +1,15 @@
+{
+  "name": "Static Assets Manager",
+  "guid": "1f826750-d8f1-4e44-a814-9432d2833dc0",
+  "version": "0.0.1.0",
+  "targetAbi": "10.8.0.0",
+  "framework": "net8.0",
+  "overview": "Upload and manage static assets for use in themes and for other plugins.",
+  "description": "A plugin that allows users to upload and manage static assets (images, etc.)",
+  "owner": "Jonathan LaCour",
+  "repository": "https://github.com/cleverdevil/jelly-static-assets",
+  "category": "General",
+  "titleColor": "#5271ff",
+  "imageUrl": "https://raw.githubusercontent.com/cleverdevil/jelly-static-assets/refs/heads/main/logo.png",
+  "changelog": "Initial release"
+}

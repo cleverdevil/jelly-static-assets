@@ -1,0 +1,18 @@
+# Build artifacts
+bin/
+obj/
+dist/
+
+# User-specific files
+*.user
+*.suo
+*.userprefs
+.vs/
+.idea/
+
+# VS Code files
+.vscode/
+
+# OS-specific files
+.DS_Store
+Thumb.db

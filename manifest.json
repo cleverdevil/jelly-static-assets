@@ -1,0 +1,15 @@
+{
+  "name": "Static Assets Manager",
+  "guid": "1f826750-d8f1-4e44-a814-9432d2833dc0",
+  "version": "1.0.0.0",
+  "targetAbi": "10.8.0.0",
+  "framework": "net6.0",
+  "overview": "Upload and manage static assets for use in custom JavaScript",
+  "description": "A plugin that allows users to upload and manage static assets (images, etc.) that can be used in custom JavaScript injections.",
+  "owner": "YourName",
+  "repository": "https://github.com/yourusername/jellyfin-static-assets",
+  "category": "General",
+  "titleColor": "#5271ff",
+  "imageUrl": "https://example.com/images/plugin-image.png",
+  "changelog": "Initial release"
+}

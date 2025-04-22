@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Static Assets Manager</title>
+    <style>
+        /* General styles */
+        .uploadSection,
+        .assetsListSection,
+        .settingsSection,
+        .usageSection {
+            margin-bottom: 2em;
+        }
+
+        .fileUploadContainer {
+            margin: 1em 0;
+        }
+
+        #assetsList {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        #assetsList th,
+        #assetsList td {
+            padding: 0.5em;
+            text-align: left;
+            border-bottom: 1px solid #ccc;
+        }
+
+        .assetUrl {
+            word-break: break-all;
+        }
+
+        .deleteAsset {
+            cursor: pointer;
+            color: #ff0000;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .successMessage {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 1em;
+            border-radius: 3px;
+            margin: 1em 0;
+        }
+
+        .errorMessage {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 1em;
+            border-radius: 3px;
+            margin: 1em 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="staticAssetsConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
+        <div data-role="content">
+            <div class="content-primary">
+                <div class="verticalSection">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">Static Assets Manager</h2>
+                        <a is="emby-linkbutton" class="raised button-alt headerHelpButton" target="_blank"
+                           href="https://github.com/yourusername/jellyfin-static-assets">Help</a>
+                    </div>
+                </div>
+
+                <div class="uploadSection verticalSection">
+                    <h3 class="sectionTitle">Upload New Asset</h3>
+                    <p>Supported file types: Images (.jpg, .png, .gif, .svg, .webp), Videos (.mp4, .webm, .ogv, .mov), Web resources (.css, .js, .json, .html, .txt)</p>
+                    <div class="inputContainer">
+                        <input type="file" id="assetFileInput" />
+                        <button is="emby-button" type="button" id="uploadButton" class="raised button-submit">
+                            Upload
+                        </button>
+                    </div>
+                    <div id="uploadStatus" class="uploadStatus"></div>
+                </div>
+
+                <div class="assetsListSection verticalSection">
+                    <h3 class="sectionTitle">Uploaded Assets</h3>
+                    <div id="assetsList" class="assetsList">Loading assets...</div>
+                </div>
+
+                <div class="settingsSection verticalSection">
+                    <h3 class="sectionTitle">Settings</h3>
+                    <div class="inputContainer">
+                        <label for="maxFileSize">Maximum file size (MB):</label>
+                        <input is="emby-input" type="number" id="maxFileSize" min="1" max="100" value="10" />
+                    </div>
+                    <div class="checkboxContainer">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" id="allowNonAdminUploads" />
+                            <span>Allow non-admin users to upload assets</span>
+                        </label>
+                    </div>
+                    <button is="emby-button" type="button" id="saveSettingsButton" class="raised button-submit">
+                        Save Settings
+                    </button>
+                    <div id="saveResult" class="padded-top"></div>
+                </div>
+
+                <div class="usageSection verticalSection">
+                  <h3 class="sectionTitle">How to Use</h3>
+                  <p>To link to your assets, simply click the "Copy Link" button for the asset.</p>
+                </div>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var StaticAssetsConfig = {
+                pluginUniqueId: '1f826750-d8f1-4e44-a814-9432d2833dc0'
+            };
+
+            // Debug logging functions
+            function showMessage(message, isError) {
+                var saveResultElem = document.getElementById('saveResult');
+                saveResultElem.innerText = message;
+
+                if (isError) {
+                    saveResultElem.className = 'errorMessage';
+                } else {
+                    saveResultElem.className = 'successMessage';
+                }
+
+                // Auto-hide after 5 seconds
+                setTimeout(function() {
+                    saveResultElem.innerText = '';
+                    saveResultElem.className = '';
+                }, 5000);
+            }
+
+            function showUploadMessage(message, isError) {
+                var uploadStatusElem = document.getElementById('uploadStatus');
+                uploadStatusElem.innerText = message;
+                uploadStatusElem.style.color = isError ? 'red' : 'green';
+            }
+
+            // Function to format file size
+            function formatFileSize(bytes) {
+                try {
+                    // Handle case where bytes might be undefined or NaN
+                    if (bytes === undefined || bytes === null) {
+                        console.error('Invalid file size (undefined or null):', bytes);
+                        return 'Unknown size';
+                    }
+
+                    // Convert to number if string
+                    bytes = Number(bytes);
+
+                    if (isNaN(bytes)) {
+                        console.error('Invalid file size (NaN after conversion):', bytes);
+                        return 'Unknown size';
+                    }
+
+                    if (bytes < 1024) {
+                        return bytes + ' bytes';
+                    } else if (bytes < 1024 * 1024) {
+                        return (bytes / 1024).toFixed(1) + ' KB';
+                    } else {
+                        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+                    }
+                } catch (e) {
+                    console.error('File size formatting error:', e);
+                    return 'Unknown size';
+                }
+            }
+
+            // Function to format date
+            function formatDate(dateString) {
+                try {
+                    // Add debugging output
+                    console.log('Formatting date:', dateString, 'Type:', typeof dateString);
+
+                    // Handle null or undefined
+                    if (dateString === null || dateString === undefined) {
+                        console.error('Date string is null or undefined');
+                        return 'Unknown date';
+                    }
+
+                    // Handle ISO 8601 date format (2025-04-21T16:39:27.1383134-07:00)
+                    var date = new Date(dateString);
+
+                    // Check if date is valid
+                    if (isNaN(date.getTime())) {
+                        console.error('Invalid date object created from:', dateString);
+
+                        // Try parsing with manual methods if standard parsing fails
+                        if (typeof dateString === 'string') {
+                            // Try matching format: 2025-04-21T16:39:27.1383134-07:00
+                            var regex = /(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/;
+                            var match = dateString.match(regex);
+
+                            if (match) {
+                                console.log('Regex matched date parts:', match);
+                                date = new Date(
+                                    parseInt(match[1]), // year
+                                    parseInt(match[2]) - 1, // month (0-based)
+                                    parseInt(match[3]), // day
+                                    parseInt(match[4]), // hour
+                                    parseInt(match[5]), // minute
+                                    parseInt(match[6])  // second
+                                );
+
+                                if (!isNaN(date.getTime())) {
+                                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                                }
+                            }
+                        }
+                        return 'Unknown date';
+                    }
+
+                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                } catch (e) {
+                    console.error('Date parsing error:', e);
+                    return 'Unknown date';
+                }
+            }
+
+            // Function to load assets list
+            function loadAssets() {
+                console.log('Loading assets list...');
+                var assetsList = document.getElementById('assetsList');
+                assetsList.innerHTML = 'Loading assets...';
+
+                // Use ApiClient to fetch assets list
+                ApiClient.getJSON('/StaticAssets/list')
+                    .then(function(assets) {
+                        console.log('Assets loaded successfully:', assets);
+
+                        // Detailed debugging of the asset objects
+                        if (assets && assets.length > 0) {
+                            assets.forEach(function(asset, index) {
+                                console.log(`Asset ${index} details:`, {
+                                    filename: asset.filename + ' (type: ' + typeof asset.filename + ')',
+                                    size: asset.size + ' (type: ' + typeof asset.size + ')',
+                                    dateUploaded: asset.dateUploaded + ' (type: ' + typeof asset.dateUploaded + ')',
+                                    url: asset.url + ' (type: ' + typeof asset.url + ')'
+                                });
+
+                                // Fix any potential case issues
+                                if (asset.Size !== undefined && asset.size === undefined) {
+                                    asset.size = asset.Size;
+                                }
+
+                                if (asset.DateUploaded !== undefined && asset.dateUploaded === undefined) {
+                                    asset.dateUploaded = asset.DateUploaded;
+                                }
+
+                                if (asset.Url !== undefined && asset.url === undefined) {
+                                    asset.url = asset.Url;
+                                }
+
+                                if (asset.Filename !== undefined && asset.filename === undefined) {
+                                    asset.filename = asset.Filename;
+                                }
+                            });
+                        }
+
+                        if (!assets || assets.length === 0) {
+                            assetsList.innerHTML = '<p>No assets uploaded yet.</p>';
+                            return;
+                        }
+
+                        // Create table for assets
+                        var table = document.createElement('table');
+                        table.className = 'tblAssetsResult';
+                        table.style.width = '100%';
+
+                        // Create table header
+                        var thead = document.createElement('thead');
+                        var headerRow = document.createElement('tr');
+
+                        ['Name', 'Size', 'Date Uploaded', 'URL', 'Actions'].forEach(function(headerText) {
+                            var th = document.createElement('th');
+                            th.textContent = headerText;
+                            headerRow.appendChild(th);
+                        });
+
+                        thead.appendChild(headerRow);
+                        table.appendChild(thead);
+
+                        // Create table body
+                        var tbody = document.createElement('tbody');
+
+                        assets.forEach(function(asset) {
+                            var row = document.createElement('tr');
+
+                            // Name cell
+                            var nameCell = document.createElement('td');
+                            nameCell.textContent = asset.filename;
+                            row.appendChild(nameCell);
+
+                            // Size cell
+                            var sizeCell = document.createElement('td');
+                            sizeCell.textContent = formatFileSize(asset.size);
+                            row.appendChild(sizeCell);
+
+                            // Date cell
+                            var dateCell = document.createElement('td');
+                            dateCell.textContent = formatDate(asset.dateUploaded);
+                            row.appendChild(dateCell);
+
+                            // URL cell
+                            var urlCell = document.createElement('td');
+                            urlCell.className = 'assetUrl';
+                            urlCell.textContent = asset.url;
+                            row.appendChild(urlCell);
+
+                            // Actions cell
+                            var actionsCell = document.createElement('td');
+
+                            var deleteButton = document.createElement('button');
+                            deleteButton.setAttribute('is', 'emby-button');
+                            deleteButton.type = 'button';
+                            deleteButton.className = 'raised btnDeleteAsset';
+                            deleteButton.dataset.filename = asset.filename;
+                            deleteButton.innerHTML = '<span>Delete</span>';
+                            deleteButton.style.marginRight = '5px';
+
+                            deleteButton.addEventListener('click', function() {
+                                deleteAsset(asset.filename);
+                            });
+
+                            actionsCell.appendChild(deleteButton);
+
+                            var copyLinkButton = document.createElement('button');
+                            copyLinkButton.setAttribute('is', 'emby-button');
+                            copyLinkButton.type = 'button';
+                            copyLinkButton.className = 'raised btnCopyAssetLink';
+                            copyLinkButton.dataset.url = asset.url;
+                            copyLinkButton.innerHTML = '<span>Copy Link</span>';
+                            copyLinkButton.style.marginRight = '5px';
+
+                            copyLinkButton.addEventListener('click', function() {
+                              navigator.clipboard.writeText(window.location.protocol + '/' + window.location.host + asset.url);
+                            });
+
+                            actionsCell.appendChild(copyLinkButton);
+
+                            row.appendChild(actionsCell);
+
+                            tbody.appendChild(row);
+                        });
+
+                        table.appendChild(tbody);
+                        assetsList.innerHTML = '';
+                        assetsList.appendChild(table);
+                    })
+                    .catch(function(error) {
+                        console.error('Error loading assets:', error);
+                        assetsList.innerHTML = '<p>Error loading assets. Please try again.</p>';
+                        showMessage('Error loading assets: ' + error.message, true);
+                    });
+            }
+
+            // Function to delete an asset
+            function deleteAsset(filename) {
+                if (!confirm('Are you sure you want to delete "' + filename + '"?')) {
+                    return;
+                }
+
+                Dashboard.showLoadingMsg();
+                console.log('Attempting to delete asset:', filename);
+
+                // Test if the asset file exists via GET request
+                fetch('/StaticAssets/asset/' + encodeURIComponent(filename), {
+                    method: 'GET'
+                })
+                .then(function(response) {
+                    if (!response.ok) {
+                        console.warn('Asset file might not exist:', response.status);
+                    }
+
+                    // Proceed with delete regardless of GET result
+                    return ApiClient.ajax({
+                        type: 'DELETE',
+                        url: '/StaticAssets/asset/' + encodeURIComponent(filename)
+                    });
+                })
+                .then(function(result) {
+                    Dashboard.hideLoadingMsg();
+                    console.log('Delete successful:', result);
+                    showMessage('Asset "' + filename + '" deleted successfully', false);
+                    loadAssets(); // Reload the assets list
+                })
+                .catch(function(error) {
+                    Dashboard.hideLoadingMsg();
+                    console.error('Error deleting asset:', error);
+
+                    // Try fallback delete method if direct method fails
+                    console.log('Trying fallback delete method...');
+                    ApiClient.getRequestHeaders().then(function(headers) {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('DELETE', '/StaticAssets/asset/' + encodeURIComponent(filename), true);
+
+                        // Add all headers from ApiClient
+                        for (var key in headers) {
+                            if (headers.hasOwnProperty(key)) {
+                                xhr.setRequestHeader(key, headers[key]);
+                            }
+                        }
+
+                        xhr.onload = function() {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                console.log('Fallback delete successful');
+                                showMessage('Asset "' + filename + '" deleted successfully', false);
+                                loadAssets(); // Reload the assets list
+                            } else {
+                                console.error('Fallback delete failed:', xhr.status, xhr.statusText);
+                                showMessage('Error deleting asset: ' + xhr.statusText, true);
+                            }
+                        };
+
+                        xhr.onerror = function() {
+                            console.error('Fallback delete network error');
+                            showMessage('Network error deleting asset', true);
+                        };
+
+                        xhr.send();
+                    });
+                });
+            }
+
+            // Function to load settings
+            function loadSettings() {
+                console.log('Loading settings...');
+
+                ApiClient.getPluginConfiguration(StaticAssetsConfig.pluginUniqueId)
+                    .then(function(config) {
+                        console.log('Settings loaded:', config);
+
+                        // Update the form fields with the loaded settings
+                        document.getElementById('maxFileSize').value = config.MaxFileSize ? (config.MaxFileSize / (1024 * 1024)) : 10;
+                        document.getElementById('allowNonAdminUploads').checked = config.AllowNonAdminUploads || false;
+                    })
+                    .catch(function(error) {
+                        console.error('Error loading settings:', error);
+                        showMessage('Error loading settings: ' + error.message, true);
+                    });
+            }
+
+            // Function to save settings
+            function saveSettings() {
+                Dashboard.showLoadingMsg();
+
+                // Get current values from form
+                var maxFileSizeMB = document.getElementById('maxFileSize').value || 10;
+                var allowNonAdminUploads = document.getElementById('allowNonAdminUploads').checked;
+
+                // Get current configuration
+                ApiClient.getPluginConfiguration(StaticAssetsConfig.pluginUniqueId)
+                    .then(function(config) {
+                        // Update with new values
+                        config.MaxFileSize = maxFileSizeMB * 1024 * 1024; // Convert MB to bytes
+                        config.AllowNonAdminUploads = allowNonAdminUploads;
+
+                        // Save updated configuration
+                        return ApiClient.updatePluginConfiguration(StaticAssetsConfig.pluginUniqueId, config);
+                    })
+                    .then(function(result) {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                        showMessage('Settings saved successfully', false);
+                    })
+                    .catch(function(error) {
+                        Dashboard.hideLoadingMsg();
+                        console.error('Error saving settings:', error);
+                        showMessage('Error saving settings: ' + error.message, true);
+                    });
+            }
+
+            // Handle file uploads
+            function uploadAsset() {
+                var fileInput = document.getElementById('assetFileInput');
+                var file = fileInput.files[0];
+
+                if (!file) {
+                    showUploadMessage('Please select a file to upload', true);
+                    return;
+                }
+
+                Dashboard.showLoadingMsg();
+                showUploadMessage('Uploading...', false);
+
+                var formData = new FormData();
+                formData.append('file', file);
+
+                // Get API token
+                var currentApiClient = ApiClient;
+                var apiKey = currentApiClient.accessToken();
+
+                // Make upload request
+                fetch('/StaticAssets/upload', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Emby-Token': apiKey
+                    }
+                })
+                .then(function(response) {
+                    Dashboard.hideLoadingMsg();
+
+                    if (!response.ok) {
+                        throw new Error('HTTP error: ' + response.status);
+                    }
+
+                    return response.json();
+                })
+                .then(function(result) {
+                    showUploadMessage('File "' + file.name + '" uploaded successfully', false);
+                    fileInput.value = ''; // Clear the file input
+                    loadAssets(); // Reload the assets list
+                })
+                .catch(function(error) {
+                    Dashboard.hideLoadingMsg();
+                    console.error('Error uploading file:', error);
+                    showUploadMessage('Error uploading file: ' + error.message, true);
+                });
+            }
+
+            // Initialize the page
+            function initializePage() {
+                console.log('Initializing Static Assets Manager plugin page...');
+
+                // Set up the save settings button
+                document.getElementById('saveSettingsButton').addEventListener('click', function() {
+                    saveSettings();
+                });
+
+                // Set up the upload button
+                document.getElementById('uploadButton').addEventListener('click', function() {
+                    uploadAsset();
+                });
+
+                // Load assets and settings
+                loadAssets();
+                loadSettings();
+
+                console.log('Static Assets Manager plugin page initialized');
+            }
+
+            // Initialize the page when the DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initializePage);
+            } else {
+                // DOMContentLoaded already fired
+                initializePage();
+            }
+        </script>
+    </div>
+</body>
+</html>
