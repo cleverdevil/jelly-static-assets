@@ -54,5 +54,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
